@@ -7,6 +7,7 @@ import android.os.Vibrator;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -23,7 +24,8 @@ import org.json.JSONObject;
 public class ScanFragment extends Fragment {
     private MaterialButtonToggleGroup toggle;
     private View resultCard;
-    private TextView icon, title, name, detail, time;
+    private TextView icon, title, name, detail, time, extra;
+    private ImageView photo;
     private ActivityResultLauncher<ScanOptions> launcher;
 
     @Override
@@ -45,6 +47,8 @@ public class ScanFragment extends Fragment {
         name = v.findViewById(R.id.resultName);
         detail = v.findViewById(R.id.resultDetail);
         time = v.findViewById(R.id.resultTime);
+        extra = v.findViewById(R.id.resultExtra);
+        photo = v.findViewById(R.id.resultPhoto);
         toggle.check(R.id.btnIn);
         v.findViewById(R.id.scanButton).setOnClickListener(x -> {
             ScanOptions o = new ScanOptions();
@@ -72,10 +76,27 @@ public class ScanFragment extends Fragment {
                 }
                 buzz(true);
                 String label = "CheckIn".equals(type) ? "Checked In" : "Checked Out";
-                showResult("OK", "Access Granted - " + label, json.optString("name"),
-                        json.optString("type") + " - " + json.optString("detail"),
+                boolean visitor = "Visitor".equals(json.optString("type"));
+                String detailText = visitor ? "Visitor" : json.optString("type") + " - " + json.optString("detail");
+                showResult("OK", "Access Granted - " + label, json.optString("name"), detailText,
                         java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
                                 .format(new java.util.Date()), Color.parseColor("#16A34A"));
+                showPhoto(json.isNull("photo") ? null : json.optString("photo"));
+                if (visitor) {
+                    StringBuilder sb = new StringBuilder();
+                    String host = json.isNull("visiting") ? "" : json.optString("visiting");
+                    if (!host.isEmpty()) {
+                        sb.append("Visiting: ").append(host);
+                        if (!json.isNull("host_room")) sb.append(" (Room ").append(json.optString("host_room")).append(")");
+                    }
+                    if (!json.isNull("purpose") && !json.optString("purpose").isEmpty())
+                        sb.append(sb.length() > 0 ? "\n" : "").append("Purpose: ").append(json.optString("purpose"));
+                    long secs = json.optLong("visit_duration_seconds", 0);
+                    if (secs > 0)
+                        sb.append(sb.length() > 0 ? "\n" : "").append("Duration: ").append(formatDuration(secs));
+                    extra.setText(sb.toString());
+                    extra.setVisibility(sb.length() > 0 ? View.VISIBLE : View.GONE);
+                }
             });
         } catch (Exception ignored) { }
     }
@@ -92,6 +113,18 @@ public class ScanFragment extends Fragment {
         name.setText(n);
         detail.setText(d);
         time.setText(tm);
+        extra.setVisibility(View.GONE);
+        photo.setVisibility(View.GONE);
+    }
+
+    private void showPhoto(String url) {
+        if (url == null || url.isEmpty()) { photo.setVisibility(View.GONE); return; }
+        photo.setVisibility(View.VISIBLE);
+        ImageLoader.load(photo, url, 240);
+    }
+
+    static String formatDuration(long s) {
+        return String.format(java.util.Locale.US, "%02d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60);
     }
 
     private void buzz(boolean ok) {
