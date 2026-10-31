@@ -17,19 +17,19 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Location fetch without Google Play services. Listens to GPS (and network) for a few seconds and
- * returns the most accurate fix, instead of trusting the first (often coarse) one.
+ * Location fetch without Google Play services. Returns a recent fix instantly, otherwise the first
+ * fix that arrives (short timeout).
  * Returns null when unavailable.
  */
 public class LocationHelper {
     public interface Callback { void onLocation(Location loc); }
 
     /** Stop early once a fix is at least this accurate (meters). */
-    private static final float GOOD_ACCURACY_M = 20f;
+    private static final float GOOD_ACCURACY_M = Float.MAX_VALUE;
     /** Give up waiting for a better fix after this long. */
-    private static final long MAX_WAIT_MS = 15000;
+    private static final long MAX_WAIT_MS = 6000;
     /** A cached fix older than this is never trusted. */
-    private static final long MAX_CACHE_AGE_MS = 15000;
+    private static final long MAX_CACHE_AGE_MS = 120000;
 
     public static boolean hasPermission(Context c) {
         return ContextCompat.checkSelfPermission(c, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
