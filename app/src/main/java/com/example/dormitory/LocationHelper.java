@@ -27,7 +27,9 @@ public class LocationHelper {
     /** Stop early once a fix is at least this accurate (meters). */
     private static final float GOOD_ACCURACY_M = 15f;
     /** Give up waiting for a better fix after this long. */
-    private static final long MAX_WAIT_MS = 3000;
+    private static final long MAX_WAIT_MS = 10000;
+    /** Once a first fix arrives, keep refining for this long. */
+    private static final long REFINE_MS = 3000;
     /** A cached fix older than this is never trusted. */
     private static final long MAX_CACHE_AGE_MS = 10000;
 
@@ -91,8 +93,14 @@ public class LocationHelper {
         LocationListener listener = new LocationListener() {
             @Override public void onLocationChanged(Location l) {
                 if (done.get()) return;
+                boolean first = best[0] == null;
                 if (better(l, best[0])) best[0] = l;
-                if (best[0].hasAccuracy() && best[0].getAccuracy() <= GOOD_ACCURACY_M) h.post(finish);
+                if (best[0].hasAccuracy() && best[0].getAccuracy() <= GOOD_ACCURACY_M) { h.post(finish); return; }
+                if (first) {
+                    // First fix in: refine for a few seconds instead of waiting out the full timeout.
+                    h.removeCallbacks(finish);
+                    h.postDelayed(finish, REFINE_MS);
+                }
             }
             @Override public void onStatusChanged(String p, int s, Bundle e) { }
             @Override public void onProviderEnabled(String p) { }
