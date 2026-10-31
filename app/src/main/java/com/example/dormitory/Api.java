@@ -131,4 +131,53 @@ public class Api {
             MAIN.post(() -> cb.onResult(r, err));
         });
     }
+
+    /** Uploads JPEG bytes to /api/upload (Cloudinary). Callback json contains "url". */
+    public static void uploadImage(Context c, byte[] jpeg, Callback cb) {
+        final Context app = c.getApplicationContext();
+        POOL.execute(() -> {
+            JSONObject result = null;
+            String error = null;
+            HttpURLConnection conn = null;
+            try {
+                String boundary = "----dorm" + System.currentTimeMillis();
+                conn = (HttpURLConnection) new URL(getServer(app) + "/api/upload").openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(60000);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+                String token = getToken(app);
+                if (token != null) conn.setRequestProperty("Authorization", "Bearer " + token);
+                try (OutputStream os = conn.getOutputStream()) {
+                    final String crlf = "\r\n";
+                    String head = "--" + boundary + crlf
+                            + "Content-Disposition: form-data; name=\"file\"; filename=\"visitor.jpg\"" + crlf
+                            + "Content-Type: image/jpeg" + crlf + crlf;
+                    os.write(head.getBytes(StandardCharsets.UTF_8));
+                    os.write(jpeg);
+                    os.write((crlf + "--" + boundary + "--" + crlf).getBytes(StandardCharsets.UTF_8));
+                }
+                int code = conn.getResponseCode();
+                InputStream is = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
+                StringBuilder sb = new StringBuilder();
+                if (is != null) {
+                    try (BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = r.readLine()) != null) sb.append(line);
+                    }
+                }
+                JSONObject json = sb.length() > 0 ? new JSONObject(sb.toString()) : new JSONObject();
+                if (code >= 400 || json.optString("url").isEmpty()) error = json.optString("error", "Image upload failed.");
+                else result = json;
+            } catch (Exception e) {
+                error = "Image upload failed. Check your connection.";
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+            final JSONObject r = result;
+            final String err = error;
+            MAIN.post(() -> cb.onResult(r, err));
+        });
+    }
 }
