@@ -39,7 +39,7 @@
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
                 android:background="@null"
-                android:hint="Search name, role, host or purpose..."
+                android:hint="Search resident or visitor..."
                 android:imeOptions="actionSearch"
                 android:inputType="textPersonName"
                 android:maxLines="1"

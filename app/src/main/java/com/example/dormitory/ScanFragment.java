@@ -62,16 +62,31 @@ public class ScanFragment extends Fragment {
     }
 
     private void submit(String token) {
+        send(token, "preview");
+    }
+
+    /** mode: "preview" (look up only), "record" (approve and log), "reject". */
+    private void send(String token, String mode) {
         String type = toggle.getCheckedButtonId() == R.id.btnOut ? "CheckOut" : "CheckIn";
         showResult("...", "Checking", "Please wait", "", "", Color.parseColor("#09090B"));
         try {
-            JSONObject body = new JSONObject().put("token", token).put("accessType", type);
+            JSONObject body = new JSONObject().put("token", token).put("accessType", type).put("mode", mode);
             Api.request(requireContext(), "POST", "/api/mobile/scan", body, (json, err) -> {
                 if (!isAdded()) return;
                 if ("SESSION_EXPIRED".equals(err)) { ((MainActivity) requireActivity()).logout(); return; }
                 if (err != null) {
                     buzz(false);
                     showResult("X", "Access Denied", err, "", "", Color.parseColor("#DC2626"));
+                    return;
+                }
+                if (json.optBoolean("preview", false)) {
+                    resultCard.setVisibility(View.GONE);
+                    showReview(token, json);
+                    return;
+                }
+                if (json.optBoolean("rejected", false)) {
+                    buzz(false);
+                    showResult("X", "Visitor Rejected", json.optString("name"), "Entry was not allowed.", java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(new java.util.Date()), Color.parseColor("#DC2626"));
                     return;
                 }
                 buzz(true);
@@ -115,6 +130,31 @@ public class ScanFragment extends Fragment {
         time.setText(tm);
         extra.setVisibility(View.GONE);
         photo.setVisibility(View.GONE);
+    }
+
+    private void showReview(String token, JSONObject json) {
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_visitor_review, null);
+        ImageView rp = v.findViewById(R.id.reviewPhoto);
+        ((TextView) v.findViewById(R.id.reviewName)).setText(json.optString("name"));
+        boolean out = "CheckOut".equals(json.optString("accessType"));
+        ((TextView) v.findViewById(R.id.reviewType)).setText("Visitor - " + (out ? "Check-Out" : "Check-In"));
+        ImageLoader.load(rp, json.isNull("photo") ? null : json.optString("photo"), 280);
+        StringBuilder sb = new StringBuilder();
+        String host = json.isNull("visiting") ? "" : json.optString("visiting");
+        sb.append("Visiting: ").append(host.isEmpty() ? "N/A" : host);
+        if (!json.isNull("host_room")) sb.append(" (Room ").append(json.optString("host_room")).append(")");
+        if (!json.isNull("purpose") && !json.optString("purpose").isEmpty())
+            sb.append("\nPurpose: ").append(json.optString("purpose"));
+        long secs = json.optLong("visit_duration_seconds", 0);
+        if (secs > 0) sb.append("\nDuration: ").append(formatDuration(secs));
+        ((TextView) v.findViewById(R.id.reviewDetails)).setText(sb.toString());
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Review Visitor")
+                .setView(v)
+                .setCancelable(false)
+                .setPositiveButton("Approve", (d, w) -> send(token, "record"))
+                .setNegativeButton("Reject", (d, w) -> send(token, "reject"))
+                .show();
     }
 
     private void showPhoto(String url) {
