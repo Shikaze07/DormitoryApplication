@@ -260,7 +260,63 @@ public class VisitorsFragment extends Fragment {
         infoView.setText(info);
         infoView.setGravity(android.view.Gravity.CENTER);
         ((ImageView) f.findViewById(R.id.passQr)).setImageBitmap(QrUtil.make(o.optString("qr_code"), 720));
+        String footer = "Valid until " + fmtDate(o.optString("qr_expires_at"), "MMM dd, hh:mm a");
+        f.findViewById(R.id.passSave).setOnClickListener(x -> savePass(o, footer));
+        f.findViewById(R.id.passShare).setOnClickListener(x -> sharePass(o, footer));
         d.show();
+    }
+
+    private static String fileName(JSONObject o) {
+        return "visitor-pass-" + o.optString("name").trim().replaceAll("[^A-Za-z0-9]+", "-") + ".png";
+    }
+
+    /** Saves the QR card into the phone gallery (Pictures/Dormitory). */
+    private void savePass(JSONObject o, String footer) {
+        Bitmap card = QrUtil.card(o.optString("qr_code"), o.optString("name"), footer);
+        if (card == null) { Toast.makeText(requireContext(), "Could not create the image.", Toast.LENGTH_SHORT).show(); return; }
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+            sharePass(o, footer); // older phones: no storage permission, so use the share sheet
+            return;
+        }
+        try {
+            android.content.ContentValues v = new android.content.ContentValues();
+            v.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, fileName(o));
+            v.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png");
+            v.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/Dormitory");
+            Uri uri = requireContext().getContentResolver().insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) throw new IllegalStateException("insert failed");
+            try (java.io.OutputStream os = requireContext().getContentResolver().openOutputStream(uri)) {
+                card.compress(Bitmap.CompressFormat.PNG, 100, os);
+            }
+            Toast.makeText(requireContext(), "Saved to Pictures/Dormitory", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Toast.makeText(requireContext(), "Could not save the image.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** Opens the share sheet so the QR image can be sent straight to the visitor. */
+    private void sharePass(JSONObject o, String footer) {
+        Bitmap card = QrUtil.card(o.optString("qr_code"), o.optString("name"), footer);
+        if (card == null) { Toast.makeText(requireContext(), "Could not create the image.", Toast.LENGTH_SHORT).show(); return; }
+        try {
+            java.io.File dir = new java.io.File(requireContext().getCacheDir(), "shared");
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+            java.io.File file = new java.io.File(dir, fileName(o));
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                card.compress(Bitmap.CompressFormat.PNG, 100, fos);
+            }
+            Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                    requireContext(), requireContext().getPackageName() + ".fileprovider", file);
+            android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_SEND);
+            i.setType("image/png");
+            i.putExtra(android.content.Intent.EXTRA_STREAM, uri);
+            i.putExtra(android.content.Intent.EXTRA_TEXT, "Visitor pass for " + o.optString("name") + ". " + footer + ".");
+            i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(android.content.Intent.createChooser(i, "Send QR pass"));
+        } catch (Exception e) {
+            Toast.makeText(requireContext(), "Could not share the image.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void showDetails(JSONObject o) {
