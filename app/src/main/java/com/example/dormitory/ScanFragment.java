@@ -153,7 +153,7 @@ public class ScanFragment extends Fragment {
         if (!isAdded()) return;
         try {
             JSONObject body = new JSONObject().put("token", token).put("accessType", type).put("mode", mode);
-            if (loc != null) body.put("latitude", loc.getLatitude()).put("longitude", loc.getLongitude());
+            if (loc != null) body.put("latitude", loc.getLatitude()).put("longitude", loc.getLongitude()).put("accuracy", loc.hasAccuracy() ? loc.getAccuracy() : 0);
             Api.request(requireContext(), "POST", "/api/mobile/scan", body, (json, err) -> {
                 if (!isAdded()) return;
                 if ("SESSION_EXPIRED".equals(err)) { ((MainActivity) requireActivity()).logout(); return; }

@@ -12,11 +12,24 @@ import android.os.Looper;
 
 import androidx.core.content.ContextCompat;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** One-shot location fetch without Google Play services. Returns null when unavailable. */
+/**
+ * Location fetch without Google Play services. Listens to GPS (and network) for a few seconds and
+ * returns the most accurate fix, instead of trusting the first (often coarse) one.
+ * Returns null when unavailable.
+ */
 public class LocationHelper {
     public interface Callback { void onLocation(Location loc); }
+
+    /** Stop early once a fix is at least this accurate (meters). */
+    private static final float GOOD_ACCURACY_M = 20f;
+    /** Give up waiting for a better fix after this long. */
+    private static final long MAX_WAIT_MS = 15000;
+    /** A cached fix older than this is never trusted. */
+    private static final long MAX_CACHE_AGE_MS = 15000;
 
     public static boolean hasPermission(Context c) {
         return ContextCompat.checkSelfPermission(c, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -34,33 +47,52 @@ public class LocationHelper {
         }
     }
 
+    private static boolean better(Location a, Location b) {
+        if (b == null) return true;
+        if (!a.hasAccuracy()) return false;
+        if (!b.hasAccuracy()) return true;
+        return a.getAccuracy() < b.getAccuracy();
+    }
+
     @SuppressWarnings({"MissingPermission", "deprecation"})
     public static void get(Context c, Callback cb) {
         if (!hasPermission(c)) { cb.onLocation(null); return; }
         LocationManager lm = (LocationManager) c.getSystemService(Context.LOCATION_SERVICE);
         if (lm == null) { cb.onLocation(null); return; }
 
-        Location best = null;
+        final Location[] best = {null};
         for (String p : lm.getProviders(true)) {
-            Location l = null;
-            try { l = lm.getLastKnownLocation(p); } catch (SecurityException ignored) { }
-            if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+            try {
+                Location l = lm.getLastKnownLocation(p);
+                if (l != null
+                        && System.currentTimeMillis() - l.getTime() < MAX_CACHE_AGE_MS
+                        && better(l, best[0])) {
+                    best[0] = l;
+                }
+            } catch (SecurityException ignored) { }
         }
-        // A fix from the last 20 seconds is fresh enough.
-        if (best != null && System.currentTimeMillis() - best.getTime() < 20000) { cb.onLocation(best); return; }
+        if (best[0] != null && best[0].hasAccuracy() && best[0].getAccuracy() <= GOOD_ACCURACY_M) {
+            cb.onLocation(best[0]);
+            return;
+        }
 
-        final Location fallback = best;
         final AtomicBoolean done = new AtomicBoolean(false);
         final Handler h = new Handler(Looper.getMainLooper());
-        final java.util.List<LocationListener> listeners = new java.util.ArrayList<>();
+        final List<LocationListener> listeners = new ArrayList<>();
 
-        final Runnable finish = () -> { };
+        final Runnable finish = () -> {
+            if (!done.compareAndSet(false, true)) return;
+            for (LocationListener x : listeners) {
+                try { lm.removeUpdates(x); } catch (SecurityException ignored) { }
+            }
+            cb.onLocation(best[0]);
+        };
+
         LocationListener listener = new LocationListener() {
             @Override public void onLocationChanged(Location l) {
-                if (done.compareAndSet(false, true)) {
-                    for (LocationListener x : listeners) lm.removeUpdates(x);
-                    cb.onLocation(l);
-                }
+                if (done.get()) return;
+                if (better(l, best[0])) best[0] = l;
+                if (best[0].hasAccuracy() && best[0].getAccuracy() <= GOOD_ACCURACY_M) h.post(finish);
             }
             @Override public void onStatusChanged(String p, int s, Bundle e) { }
             @Override public void onProviderEnabled(String p) { }
@@ -72,18 +104,13 @@ public class LocationHelper {
         for (String p : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
             try {
                 if (lm.isProviderEnabled(p)) {
-                    lm.requestSingleUpdate(p, listener, Looper.getMainLooper());
+                    lm.requestLocationUpdates(p, 0L, 0f, listener, Looper.getMainLooper());
                     requested = true;
                 }
             } catch (SecurityException ignored) { }
         }
-        if (!requested) { cb.onLocation(fallback); return; }
+        if (!requested) { cb.onLocation(best[0]); return; }
 
-        h.postDelayed(() -> {
-            if (done.compareAndSet(false, true)) {
-                for (LocationListener x : listeners) lm.removeUpdates(x);
-                cb.onLocation(fallback);
-            }
-        }, 8000);
+        h.postDelayed(finish, MAX_WAIT_MS);
     }
 }
