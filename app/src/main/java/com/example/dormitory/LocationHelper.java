@@ -25,11 +25,11 @@ public class LocationHelper {
     public interface Callback { void onLocation(Location loc); }
 
     /** Stop early once a fix is at least this accurate (meters). */
-    private static final float GOOD_ACCURACY_M = Float.MAX_VALUE;
+    private static final float GOOD_ACCURACY_M = 15f;
     /** Give up waiting for a better fix after this long. */
-    private static final long MAX_WAIT_MS = 6000;
+    private static final long MAX_WAIT_MS = 3000;
     /** A cached fix older than this is never trusted. */
-    private static final long MAX_CACHE_AGE_MS = 120000;
+    private static final long MAX_CACHE_AGE_MS = 10000;
 
     public static boolean hasPermission(Context c) {
         return ContextCompat.checkSelfPermission(c, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
