@@ -176,7 +176,7 @@ public class VisitorsFragment extends Fragment {
             long secs = remainingSeconds(cal);
             durInfo.setText(secs > 0
                     ? ScanFragment.formatDuration(secs) + " (until 11:59 PM)"
-                    : "Too late to register for this date");
+                    : "Today's window has ended. Set the Expected Date of Visit to tomorrow or later.");
         };
         updateDuration.run();
         when.setOnClickListener(x -> {
@@ -201,7 +201,7 @@ public class VisitorsFragment extends Fragment {
             else if (photoUrl == null) error = "Visitor photo is required.";
             else if (fn.length() < 2) error = "First name must be at least 2 characters.";
             else if (ln.length() < 2) error = "Last name must be at least 2 characters.";
-            else if (secs <= 0) error = "It is too late to register a visit for this date.";
+            else if (secs <= 0) error = "Today's visit window has already ended (passes expire at 11:59 PM). Please set the Expected Date of Visit to tomorrow or a later date.";
             else if (pu.length() < 5) error = "Purpose must be at least 5 characters.";
             if (error != null) { Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show(); return; }
 
