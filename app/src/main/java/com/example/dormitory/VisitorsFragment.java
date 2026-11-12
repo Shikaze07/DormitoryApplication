@@ -166,6 +166,7 @@ public class VisitorsFragment extends Fragment {
                 last = f.findViewById(R.id.lastName),
                 purpose = f.findViewById(R.id.purpose);
         TextView durInfo = f.findViewById(R.id.durInfo);
+        TextView dateWarn = f.findViewById(R.id.dateWarn);
         MaterialButtonToggleGroup gender = f.findViewById(R.id.gender);
         MaterialButton when = f.findViewById(R.id.whenBtn);
         gender.check(R.id.male);
@@ -174,9 +175,8 @@ public class VisitorsFragment extends Fragment {
         when.setText(fmt.format(cal.getTime()));
         final Runnable updateDuration = () -> {
             long secs = remainingSeconds(cal);
-            durInfo.setText(secs > 0
-                    ? ScanFragment.formatDuration(secs) + " (until 11:59 PM)"
-                    : "Today's window has ended. Set the Expected Date of Visit to tomorrow or later.");
+            durInfo.setText(secs > 0 ? ScanFragment.formatDuration(secs) + " (until 11:59 PM)" : "—");
+            dateWarn.setVisibility(secs > 0 ? View.GONE : View.VISIBLE);
         };
         updateDuration.run();
         when.setOnClickListener(x -> {
@@ -201,7 +201,7 @@ public class VisitorsFragment extends Fragment {
             else if (photoUrl == null) error = "Visitor photo is required.";
             else if (fn.length() < 2) error = "First name must be at least 2 characters.";
             else if (ln.length() < 2) error = "Last name must be at least 2 characters.";
-            else if (secs <= 0) error = "Today's visit window has already ended (passes expire at 11:59 PM). Please set the Expected Date of Visit to tomorrow or a later date.";
+            else if (secs <= 0) error = "Please set the Expected Date of Visit to tomorrow or later.";
             else if (pu.length() < 5) error = "Purpose must be at least 5 characters.";
             if (error != null) { Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show(); return; }
 

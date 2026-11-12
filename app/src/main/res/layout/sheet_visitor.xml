@@ -160,6 +160,16 @@
             android:layout_marginTop="8dp" />
 
         <TextView
+            android:id="@+id/dateWarn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Today's passes have ended. Please set the expected date to tomorrow or later."
+            android:textColor="#DC2626"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
