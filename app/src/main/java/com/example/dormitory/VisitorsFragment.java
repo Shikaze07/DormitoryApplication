@@ -137,8 +137,16 @@ public class VisitorsFragment extends Fragment {
         return bos.toByteArray();
     }
 
-    private static int num(EditText e) {
-        try { return Integer.parseInt(e.getText().toString().trim()); } catch (Exception ex) { return 0; }
+    /** Seconds from now (or the start of the chosen day) until 11:59 PM on the chosen day. */
+    private static long remainingSeconds(Calendar chosen) {
+        Calendar end = (Calendar) chosen.clone();
+        end.set(Calendar.HOUR_OF_DAY, 23); end.set(Calendar.MINUTE, 59);
+        end.set(Calendar.SECOND, 0); end.set(Calendar.MILLISECOND, 0);
+        Calendar dayStart = (Calendar) chosen.clone();
+        dayStart.set(Calendar.HOUR_OF_DAY, 0); dayStart.set(Calendar.MINUTE, 0);
+        dayStart.set(Calendar.SECOND, 0); dayStart.set(Calendar.MILLISECOND, 0);
+        long start = Math.max(System.currentTimeMillis(), dayStart.getTimeInMillis());
+        return (end.getTimeInMillis() - start) / 1000;
     }
 
     private void openForm() {
@@ -156,20 +164,26 @@ public class VisitorsFragment extends Fragment {
         EditText first = f.findViewById(R.id.firstName),
                 middle = f.findViewById(R.id.middleName),
                 last = f.findViewById(R.id.lastName),
-                purpose = f.findViewById(R.id.purpose),
-                durH = f.findViewById(R.id.durH),
-                durM = f.findViewById(R.id.durM),
-                durS = f.findViewById(R.id.durS);
+                purpose = f.findViewById(R.id.purpose);
+        TextView durInfo = f.findViewById(R.id.durInfo);
         MaterialButtonToggleGroup gender = f.findViewById(R.id.gender);
         MaterialButton when = f.findViewById(R.id.whenBtn);
         gender.check(R.id.male);
         final Calendar cal = Calendar.getInstance();
         final SimpleDateFormat fmt = new SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault());
         when.setText(fmt.format(cal.getTime()));
+        final Runnable updateDuration = () -> {
+            long secs = remainingSeconds(cal);
+            durInfo.setText(secs > 0
+                    ? ScanFragment.formatDuration(secs) + " (until 11:59 PM)"
+                    : "Too late to register for this date");
+        };
+        updateDuration.run();
         when.setOnClickListener(x -> {
             DatePickerDialog dp = new DatePickerDialog(requireContext(), (p, y, m, dd) -> {
                 cal.set(y, m, dd);
                 when.setText(fmt.format(cal.getTime()));
+                updateDuration.run();
             }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH));
             dp.getDatePicker().setMinDate(System.currentTimeMillis() - 1000);
             dp.show();
@@ -181,16 +195,13 @@ public class VisitorsFragment extends Fragment {
             String mn = middle.getText().toString().trim();
             String ln = last.getText().toString().trim();
             String pu = purpose.getText().toString().trim();
-            int h = num(durH), m = num(durM), s = num(durS);
-            long secs = h * 3600L + m * 60L + s;
+            long secs = remainingSeconds(cal);
             String error = null;
             if (uploading) error = "Please wait for the photo to finish uploading.";
             else if (photoUrl == null) error = "Visitor photo is required.";
             else if (fn.length() < 2) error = "First name must be at least 2 characters.";
             else if (ln.length() < 2) error = "Last name must be at least 2 characters.";
-            else if (h > 24 || m > 59 || s > 59) error = "Duration must be within 24h, 59m, 59s.";
-            else if (secs <= 0) error = "Visit duration must be greater than 0.";
-            else if (secs > 86400) error = "Visit duration cannot exceed 24 hours.";
+            else if (secs <= 0) error = "It is too late to register a visit for this date.";
             else if (pu.length() < 5) error = "Purpose must be at least 5 characters.";
             if (error != null) { Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show(); return; }
 
@@ -204,8 +215,8 @@ public class VisitorsFragment extends Fragment {
                         .put("last_name", ln)
                         .put("gender", gender.getCheckedButtonId() == R.id.female ? "Female" : "Male")
                         .put("purpose", pu)
-                        .put("visit_duration_seconds", secs)
-                        .put("expected_at", day.format(cal.getTime()));
+                        .put("expected_at", day.format(cal.getTime()))
+                        .put("tz_offset", -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000);
                 Api.request(requireContext(), "POST", "/api/mobile/visitors", body, (json, err) -> {
                     submit.setEnabled(true);
                     if (!isAdded()) return;
